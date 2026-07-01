@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Playground App</title>
     <!-- Load eruda first so console/network instrumentation is active from document-start. -->
-    <script src="/assets/eruda.js"></script>
+    <!-- Relative path: works on the dev server and on GitHub Pages. -->
+    <script src="../assets/eruda.js"></script>
     <script>
       // Runs inside the iframe realm: eruda captures this page's console,
       // errors, DOM and network natively, while its UI mounts into the
@@ -139,10 +140,10 @@
 
     <div class="card">
       <h2>Network</h2>
-      <button onclick="fetch('/data.json').then(r => r.json()).then(d => console.log('fetched:', d))">
-        fetch /data.json
+      <button onclick="fetch('../data.json').then(r => r.json()).then(d => console.log('fetched:', d))">
+        fetch data.json
       </button>
-      <button onclick="fetch('/no-such-thing').then(r => console.log('status', r.status))">
+      <button onclick="fetch('../no-such-thing').then(r => console.log('status', r.status))">
         fetch 404
       </button>
       <button id="xhr-btn">XHR /data.json</button>
@@ -177,7 +178,7 @@
 
       document.getElementById('xhr-btn').addEventListener('click', () => {
         const xhr = new XMLHttpRequest()
-        xhr.open('GET', '/data.json')
+        xhr.open('GET', '../data.json')
         xhr.onload = () => console.log('xhr done:', xhr.status)
         xhr.send()
       })
