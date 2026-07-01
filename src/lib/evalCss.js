@@ -20,9 +20,12 @@ const exports = function (css, container) {
   }
 
   container = container || exports.container || document.head
-  const el = document.createElement('style')
+  const doc = container.ownerDocument || document
+  const el = doc.createElement('style')
 
   el.type = 'text/css'
+  // Marks styles for cleanup when a new eruda realm reuses the same document.
+  el.setAttribute('data-eruda-style', 'true')
   container.appendChild(el)
 
   const style = { css, el, container }

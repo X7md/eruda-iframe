@@ -206,6 +206,12 @@ export default class Console extends Tool {
 
     if (cfg.get('overrideConsole')) this.overrideConsole()
 
+    // Elements only assigns $0-$4 once a node is selected; seed them so
+    // evaluating them earlier yields null instead of a ReferenceError.
+    ;['$0', '$1', '$2', '$3', '$4'].forEach((name) =>
+      logger.setGlobal(name, null)
+    )
+
     this._logger = logger
   }
   _exposeLogger() {

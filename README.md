@@ -31,6 +31,62 @@ Console for Mobile Browsers.
 
 <img src="https://eruda.liriliri.io/screenshot.jpg" style="width:100%">
 
+## About this fork (eruda-iframe)
+
+This fork wires eruda to an **iframe**: the devtools UI lives in a host page
+while everything it inspects — console logs, errors, JS evaluation, the DOM
+tree, and network requests — targets the page inside the iframe.
+
+### How it works
+
+eruda's capture layer is realm-bound: `console` overriding, error listeners,
+`document` access, and chobitsu's XHR/fetch patching all act on the realm the
+bundle runs in. So instead of reaching into the iframe from the parent, the
+bundle is loaded **inside the iframe** and its UI is projected into a container
+element in the host page (same-origin):
+
+```html
+<!-- inside the iframe page, first script in <head> -->
+<script src="/assets/eruda.js"></script>
+<script>
+  eruda.init({
+    container: window.parent.document.getElementById('my-devtools-container'),
+    inline: true,
+    autoScale: false,
+  })
+</script>
+```
+
+All panels then work against the iframe natively — typing
+`document.body.style.background = 'tomato'` in the console repaints the
+iframe, Elements edits the iframe DOM, and Network captures the iframe's
+requests.
+
+### Playground
+
+```bash
+npm install
+npm run dev
+```
+
+Then open http://localhost:8080/playground/index.html — a host page with a
+demo app in an iframe, the devtools pane below (toggle it with the toolbar
+button; its height follows the Display Size setting), and buttons that
+exercise console/network/DOM capture. See `playground/`.
+
+### Fork changes
+
+- `src/lib/uiRealm.js` (new): tracks the host document/window the UI is
+  mounted into; `eruda.js`, `evalCss.js`, `DevTools.js` and `EntryBtn.js` use
+  it instead of the bundle realm's globals for UI mounting and metrics.
+- `DevTools.hide()` works in inline mode, so `eruda.show()/hide()/toggle()`
+  can drive an embedded panel (show/hide events let the embedder collapse it).
+- `$0`–`$4` are seeded at startup, so evaluating them before selecting a node
+  in Elements yields `null` instead of a `ReferenceError`.
+- Build migrated from webpack to **rspack** (`build/rspack.*.js`,
+  `npm run dev` / `npm run build`; the old webpack configs remain and
+  `npm run dev:webpack` still works).
+
 ## Demo
 
 ![Demo](https://eruda.liriliri.io/qrcode.png)

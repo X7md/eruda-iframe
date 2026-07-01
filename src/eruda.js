@@ -28,6 +28,7 @@ import nextTick from 'licia/nextTick'
 import isEqual from 'licia/isEqual'
 import extend from 'licia/extend'
 import evalCss from './lib/evalCss'
+import { setUiRoot, getUiDoc } from './lib/uiRealm'
 import chobitsu from './lib/chobitsu'
 
 export default {
@@ -194,6 +195,8 @@ export default {
       container = document.createElement('div')
       document.documentElement.appendChild(container)
     }
+    setUiRoot(container)
+    const uiDoc = getUiDoc()
 
     container.id = 'eruda'
     container.style.all = 'initial'
@@ -209,7 +212,7 @@ export default {
       }
       if (shadowRoot) {
         // font-face doesn't work inside shadow dom.
-        evalCss.container = document.head
+        evalCss.container = uiDoc.head
         evalCss(
           require('./style/icon.css') +
             require('luna-console/luna-console.css') +
@@ -219,14 +222,14 @@ export default {
             require('luna-notification/luna-notification.css')
         )
 
-        el = document.createElement('div')
+        el = uiDoc.createElement('div')
         shadowRoot.appendChild(el)
         this._shadowRoot = shadowRoot
       }
     }
 
     if (!this._shadowRoot) {
-      el = document.createElement('div')
+      el = uiDoc.createElement('div')
       container.appendChild(el)
     }
 

@@ -289,6 +289,9 @@ export default class Elements extends Tool {
   _updateHistory() {
     const console = this._container.get('console')
     if (!console) return
+    // Nothing selected yet (init time): keep the console's seeded values
+    // instead of clobbering $0-$4 with undefined.
+    if (!this._curNode) return
 
     const history = this._history
     history.unshift(this._curNode)

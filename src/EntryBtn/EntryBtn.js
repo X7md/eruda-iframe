@@ -7,8 +7,7 @@ import orientation from 'licia/orientation'
 import pointerEvent from 'licia/pointerEvent'
 import { pxToNum, classPrefix as c, eventClient } from '../lib/util'
 import evalCss from '../lib/evalCss'
-
-const $document = $(document)
+import { getUiDoc, getUiWin } from '../lib/uiRealm'
 
 export default class EntryBtn extends Emitter {
   constructor($container) {
@@ -17,6 +16,7 @@ export default class EntryBtn extends Emitter {
     this._style = evalCss(require('./EntryBtn.scss'))
 
     this._$container = $container
+    this._$document = $(getUiDoc())
     this._initTpl()
     this._bindEvent()
     this._registerListener()
@@ -94,8 +94,8 @@ export default class EntryBtn extends Emitter {
     this._oldX = pxToNum($el.css('left'))
     this._oldY = pxToNum($el.css('top'))
     this._startY = eventClient('y', e)
-    $document.on(pointerEvent('move'), this._onDragMove)
-    $document.on(pointerEvent('up'), this._onDragEnd)
+    this._$document.on(pointerEvent('move'), this._onDragMove)
+    this._$document.on(pointerEvent('up'), this._onDragEnd)
   }
   _onDragMove = (e) => {
     const btnSize = this._$el.get(0).offsetWidth
@@ -133,8 +133,8 @@ export default class EntryBtn extends Emitter {
     }
 
     this._onDragMove(e)
-    $document.off(pointerEvent('move'), this._onDragMove)
-    $document.off(pointerEvent('up'), this._onDragEnd)
+    this._$document.off(pointerEvent('move'), this._onDragMove)
+    this._$document.off(pointerEvent('up'), this._onDragEnd)
 
     const cfg = this.config
 
@@ -153,7 +153,7 @@ export default class EntryBtn extends Emitter {
     $el.on(pointerEvent('down'), this._onDragStart)
 
     orientation.on('change', () => this._resetPos(true))
-    window.addEventListener('resize', () => this._resetPos())
+    getUiWin().addEventListener('resize', () => this._resetPos())
   }
   initCfg(settings) {
     const cfg = (this.config = Settings.createCfg('entry-button', {
@@ -168,9 +168,11 @@ export default class EntryBtn extends Emitter {
   _getDefPos() {
     const minWidth = this._$el.get(0).offsetWidth + 10
 
+    const uiWin = getUiWin()
+
     return {
-      x: window.innerWidth - minWidth,
-      y: window.innerHeight - minWidth,
+      x: uiWin.innerWidth - minWidth,
+      y: uiWin.innerHeight - minWidth,
     }
   }
 }

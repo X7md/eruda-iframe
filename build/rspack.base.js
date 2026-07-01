@@ -1,12 +1,9 @@
 const autoprefixer = require('autoprefixer')
 const prefixer = require('postcss-prefixer')
 const clean = require('postcss-clean')
-const webpack = require('webpack')
+const rspack = require('@rspack/core')
 const pkg = require('../package.json')
 const path = require('path')
-const ESLintPlugin = require('eslint-webpack-plugin')
-
-process.traceDeprecation = true
 
 const banner = pkg.name + ' v' + pkg.version + ' ' + pkg.homepage
 
@@ -55,8 +52,14 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, '../dist'),
     publicPath: '/assets/',
-    library: 'eruda',
-    libraryTarget: 'umd',
+    library: {
+      name: 'eruda',
+      type: 'umd',
+    },
+  },
+  // css handled by the loader chain below, not rspack's native css support
+  experiments: {
+    css: false,
   },
   module: {
     rules: [
@@ -109,10 +112,9 @@ module.exports = {
     ],
   },
   plugins: [
-    new webpack.BannerPlugin(banner),
-    new webpack.DefinePlugin({
+    new rspack.BannerPlugin(banner),
+    new rspack.DefinePlugin({
       VERSION: '"' + pkg.version + '"',
     }),
-    new ESLintPlugin(),
   ],
 }

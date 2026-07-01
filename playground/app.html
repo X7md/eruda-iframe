@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playground App</title>
+    <!-- Load eruda first so console/network instrumentation is active from document-start. -->
+    <script src="/assets/eruda.js"></script>
+    <script>
+      // Runs inside the iframe realm: eruda captures this page's console,
+      // errors, DOM and network natively, while its UI mounts into the
+      // host page's #devtools panel.
+      ;(function () {
+        if (window.parent === window) {
+          // Opened standalone (not inside the playground host): fall back
+          // to the regular floating eruda.
+          eruda.init()
+          return
+        }
+        const hostDoc = window.parent.document
+        const pane = hostDoc.getElementById('devtools-pane')
+        // Drop UI and head styles left behind by the previous realm (iframe
+        // reload). eruda renames its container and attaches a shadow root,
+        // so a fresh container element is needed on every load.
+        pane.innerHTML = ''
+        hostDoc
+          .querySelectorAll('style[data-eruda-style]')
+          .forEach((el) => el.remove())
+        const container = hostDoc.createElement('div')
+        pane.appendChild(container)
+        eruda.init({
+          container,
+          inline: true,
+          autoScale: false,
+          defaults: {
+            displaySize: 25,
+          },
+        })
+        // eruda applies `all: initial` to the container; restore sizing so it
+        // fills the pane (inline mode makes the panel 100% of the container).
+        container.style.display = 'block'
+        container.style.height = '100%'
+        container.style.position = 'relative'
+        // Inline mode ignores the exposed "Display Size" setting, so drive
+        // the host pane height from it instead (Settings tab slider works).
+        // Only react to changes: the stored value may predate the playground,
+        // so the 25vh default from the host CSS wins until the user moves it.
+        const devTools = eruda.get()
+        devTools.config.on('change', (key, val) => {
+          if (key === 'displaySize') pane.style.height = val + 'vh'
+        })
+        // Collapse/expand the host pane with eruda's native show/hide.
+        devTools.on('hide', () => (pane.style.display = 'none'))
+        devTools.on('show', () => (pane.style.display = ''))
+      })()
+      console.log('Hello from the iframe! eruda is wired up.')
+    </script>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: #fff;
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 22px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(6px);
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 15px;
+        opacity: 0.9;
+      }
+      button {
+        background: rgba(255, 255, 255, 0.9);
+        color: #4a3f8a;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 14px;
+        margin: 3px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:active {
+        transform: scale(0.97);
+      }
+      #box {
+        width: 90px;
+        height: 90px;
+        background: #ffd166;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #4a3f8a;
+        font-weight: 700;
+        margin-top: 8px;
+      }
+      ul#list {
+        margin: 8px 0 0;
+        padding-left: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🎮 Playground App (inside iframe)</h1>
+    <p>
+      Everything below is captured by the eruda panel in the host page. Try the
+      console input, e.g.
+      <code>document.body.style.background = 'tomato'</code>
+    </p>
+
+    <div class="card">
+      <h2>Console</h2>
+      <button onclick="console.log('plain log', { a: 1, b: [2, 3] })">
+        log
+      </button>
+      <button onclick="console.warn('careful now…')">warn</button>
+      <button onclick="console.error('boom (handled)')">error</button>
+      <button onclick="console.table([{ x: 1, y: 2 }, { x: 3, y: 4 }])">
+        table
+      </button>
+      <button onclick="undefinedFunction()">uncaught error</button>
+      <button onclick="Promise.reject(new Error('rejected promise'))">
+        promise rejection
+      </button>
+      <button id="interval-btn">start interval log</button>
+    </div>
+
+    <div class="card">
+      <h2>Network</h2>
+      <button onclick="fetch('/data.json').then(r => r.json()).then(d => console.log('fetched:', d))">
+        fetch /data.json
+      </button>
+      <button onclick="fetch('/no-such-thing').then(r => console.log('status', r.status))">
+        fetch 404
+      </button>
+      <button id="xhr-btn">XHR /data.json</button>
+    </div>
+
+    <div class="card">
+      <h2>DOM (inspect &amp; edit via Elements panel)</h2>
+      <div id="box" title="inspect me">#box</div>
+      <ul id="list">
+        <li>alpha</li>
+        <li>beta</li>
+        <li>gamma</li>
+      </ul>
+      <button id="add-item">add list item</button>
+      <button id="spin-box">animate box</button>
+    </div>
+
+    <script>
+      let intervalId = null
+      let tick = 0
+      document.getElementById('interval-btn').addEventListener('click', function () {
+        if (intervalId) {
+          clearInterval(intervalId)
+          intervalId = null
+          this.textContent = 'start interval log'
+          console.info('interval stopped')
+        } else {
+          intervalId = setInterval(() => console.log('tick', ++tick), 1000)
+          this.textContent = 'stop interval log'
+        }
+      })
+
+      document.getElementById('xhr-btn').addEventListener('click', () => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('GET', '/data.json')
+        xhr.onload = () => console.log('xhr done:', xhr.status)
+        xhr.send()
+      })
+
+      document.getElementById('add-item').addEventListener('click', () => {
+        const li = document.createElement('li')
+        li.textContent = 'item ' + (document.querySelectorAll('#list li').length + 1)
+        document.getElementById('list').appendChild(li)
+        console.log('added', li)
+      })
+
+      document.getElementById('spin-box').addEventListener('click', () => {
+        const box = document.getElementById('box')
+        box.animate(
+          [{ transform: 'rotate(0turn)' }, { transform: 'rotate(1turn)' }],
+          { duration: 600, easing: 'ease-in-out' }
+        )
+      })
+    </script>
+  </body>
+</html>

@@ -18,6 +18,7 @@ import startWith from 'licia/startWith'
 import ready from 'licia/ready'
 import pointerEvent from 'licia/pointerEvent'
 import evalCss from '../lib/evalCss'
+import { getUiDoc, getUiWin } from '../lib/uiRealm'
 import emitter from '../lib/emitter'
 import { isDarkTheme } from '../lib/themes'
 import LunaNotification from 'luna-notification'
@@ -79,10 +80,6 @@ export default class DevTools extends Emitter {
     return this
   }
   hide() {
-    if (this._inline) {
-      return
-    }
-
     this._isShow = false
     this.emit('hide')
 
@@ -254,7 +251,7 @@ export default class DevTools extends Emitter {
     this.removeAll()
     this._tab.destroy()
     this._$el.remove()
-    window.removeEventListener('resize', this._checkSafeArea)
+    getUiWin().removeEventListener('resize', this._checkSafeArea)
     emitter.off(emitter.SCALE, this._updateTabHeight)
   }
   _checkSafeArea = () => {
@@ -342,7 +339,7 @@ export default class DevTools extends Emitter {
   _bindEvent() {
     const $resizer = this._$el.find(c('.resizer'))
     const $navBar = this._$el.find(c('.nav-bar'))
-    const $document = $(document)
+    const $document = $(getUiDoc())
 
     if (this._inline) {
       $resizer.hide()
@@ -371,7 +368,8 @@ export default class DevTools extends Emitter {
 
       e = e.origEvent
       const deltaY =
-        ((this._resizeStartY - eventClient('y', e)) / window.innerHeight) * 100
+        ((this._resizeStartY - eventClient('y', e)) / getUiWin().innerHeight) *
+        100
       let displaySize = this._resizeStartSize + deltaY
       if (displaySize < 40) {
         displaySize = 40
@@ -394,7 +392,7 @@ export default class DevTools extends Emitter {
 
     $navBar.on('contextmenu', (e) => e.preventDefault())
     this.$container.on('click', (e) => e.stopPropagation())
-    window.addEventListener('resize', this._checkSafeArea)
+    getUiWin().addEventListener('resize', this._checkSafeArea)
 
     emitter.on(emitter.SCALE, this._updateTabHeight)
 
