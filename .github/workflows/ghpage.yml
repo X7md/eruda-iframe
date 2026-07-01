@@ -33,6 +33,9 @@ jobs:
           cp test/data.json site/
           printf '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=playground/">' > site/index.html
       - uses: actions/configure-pages@v5
+        with:
+          # auto-enable Pages with the "GitHub Actions" source on first run
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
