@@ -31,6 +31,12 @@ jobs:
           cp dist/eruda.js.map site/assets/ 2>/dev/null || true
           # playground/ ships its own data.json and chobitsu.js
           cp -r playground site/playground
+          # Cache-bust script URLs per deploy: CDNs (e.g. Cloudflare) edge-cache
+          # .js aggressively, and a stale bundle behind a fresh page breaks the
+          # playground in subtle ways on devices that hit an old cache entry.
+          V=${GITHUB_SHA::8}
+          sed -i "s|src=\"../assets/eruda.js\"|src=\"../assets/eruda.js?v=$V\"|g; s|src=\"cdp-client.js\"|src=\"cdp-client.js?v=$V\"|g" site/playground/index.html
+          sed -i "s|src=\"chobitsu.js\"|src=\"chobitsu.js?v=$V\"|g; s|src=\"agent.js\"|src=\"agent.js?v=$V\"|g" site/playground/app.html
           printf '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=playground/">' > site/index.html
       - uses: actions/configure-pages@v5
         with:
