@@ -31,11 +31,17 @@ export default class Detail {
   constructor($container, devtools) {
     this._$container = $container
     this._devtools = devtools
+    this._chobitsu = chobitsu
     this._curEl = document.documentElement
     this._initObserver()
     this._initCfg()
     this._initTpl()
     this._bindEvent()
+  }
+  // Kept in sync with Elements when the panel is retargeted at another
+  // realm's document (see Elements#setTarget).
+  setChobitsu(chobitsu) {
+    this._chobitsu = chobitsu
   }
   show(el) {
     this._curEl = el
@@ -48,7 +54,7 @@ export default class Detail {
   hide = () => {
     this._$container.hide()
     this._disableObserver()
-    chobitsu.domain('Overlay').hideHighlight()
+    this._chobitsu.domain('Overlay').hideHighlight()
   }
   destroy() {
     this._disableObserver()
@@ -101,8 +107,8 @@ export default class Detail {
       highlightConfig.contentColor = 'rgba(111, 168, 220, .66)'
     }
 
-    const { nodeId } = chobitsu.domain('DOM').getNodeId({ node: el })
-    chobitsu.domain('Overlay').highlightNode({
+    const { nodeId } = this._chobitsu.domain('DOM').getDOMNodeId({ node: el })
+    this._chobitsu.domain('Overlay').highlightNode({
       nodeId,
       highlightConfig,
     })

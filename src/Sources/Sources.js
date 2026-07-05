@@ -79,6 +79,14 @@ export default class Sources extends Tool {
 
     return this
   }
+  // The default view fetches the inspected page's own source; point it at
+  // another realm's window (e.g. an iframe) instead of this page.
+  setTarget({ win }) {
+    this._win = win
+    delete this._html
+
+    return this
+  }
   _renderDef() {
     if (this._html) {
       this._data = {
@@ -93,7 +101,7 @@ export default class Sources extends Tool {
     this._isGettingHtml = true
 
     ajax({
-      url: location.href,
+      url: (this._win || window).location.href,
       success: (data) => (this._html = data),
       error: () => (this._html = 'Sorry, unable to fetch source code:('),
       complete: () => {

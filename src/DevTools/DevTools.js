@@ -210,19 +210,21 @@ export default class DevTools extends Emitter {
         ...keys(evalCss.getThemes()),
       ])
 
-    if (!this._inline) {
-      settings
-        .range(cfg, 'transparency', 'Transparency', {
-          min: 0.2,
-          max: 1,
-          step: 0.01,
-        })
-        .range(cfg, 'displaySize', 'Display Size', {
-          min: 40,
-          max: 100,
-          step: 1,
-        })
-    }
+    // Exposed in inline mode too: transparency applies directly, and while
+    // inline ignores displaySize for the panel itself (it always fills its
+    // container), embedders can listen for the config change and resize the
+    // container — the playground host does exactly that.
+    settings
+      .range(cfg, 'transparency', 'Transparency', {
+        min: 0.2,
+        max: 1,
+        step: 0.01,
+      })
+      .range(cfg, 'displaySize', 'Display Size', {
+        min: 40,
+        max: 100,
+        step: 1,
+      })
 
     settings
       .button('Restore defaults and reload', function () {

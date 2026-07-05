@@ -29,8 +29,8 @@ jobs:
           mkdir -p site/assets
           cp dist/eruda.js site/assets/
           cp dist/eruda.js.map site/assets/ 2>/dev/null || true
+          # playground/ ships its own data.json and chobitsu.js
           cp -r playground site/playground
-          cp test/data.json site/
           printf '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=playground/">' > site/index.html
       - uses: actions/configure-pages@v5
         with:

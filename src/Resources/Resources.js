@@ -27,6 +27,19 @@ export default class Resources extends Tool {
     this.name = 'resources'
     this._hideErudaSetting = false
     this._observeElement = true
+    // The document whose scripts/styles/iframes/images are listed and
+    // observed — swapped by setTarget. Storage and cookies are per-origin,
+    // so they need no retargeting for same-origin documents.
+    this._win = window
+    this._doc = document
+  }
+  setTarget({ win }) {
+    this._win = win
+    this._doc = win.document
+    this._disableObserver()
+    if (this._observeElement) this._enableObserver()
+
+    return this.refresh()
   }
   init($el, container) {
     super.init($el)
@@ -73,8 +86,8 @@ export default class Resources extends Tool {
   refreshScript() {
     let scriptData = []
 
-    $('script').each(function () {
-      const src = this.src
+    each(this._doc.querySelectorAll('script'), (el) => {
+      const src = el.src
 
       if (src !== '') scriptData.push(src)
     })
@@ -111,10 +124,10 @@ export default class Resources extends Tool {
   refreshStylesheet() {
     let stylesheetData = []
 
-    $('link').each(function () {
-      if (this.rel !== 'stylesheet') return
+    each(this._doc.querySelectorAll('link'), (el) => {
+      if (el.rel !== 'stylesheet') return
 
-      stylesheetData.push(this.href)
+      stylesheetData.push(el.href)
     })
 
     stylesheetData = unique(stylesheetData)
@@ -149,9 +162,8 @@ export default class Resources extends Tool {
   refreshIframe() {
     let iframeData = []
 
-    $('iframe').each(function () {
-      const $this = $(this)
-      const src = $this.attr('src')
+    each(this._doc.querySelectorAll('iframe'), (el) => {
+      const src = el.getAttribute('src')
 
       if (src) iframeData.push(src)
     })
@@ -200,7 +212,7 @@ export default class Resources extends Tool {
     let imageData = []
 
     const performance = (this._performance =
-      window.webkitPerformance || window.performance)
+      this._win.webkitPerformance || this._win.performance)
     if (performance && performance.getEntries) {
       const entries = this._performance.getEntries()
       entries.forEach((entry) => {
@@ -212,11 +224,10 @@ export default class Resources extends Tool {
         }
       })
     } else {
-      $('img').each(function () {
-        const $this = $(this)
-        const src = $this.attr('src')
+      each(this._doc.querySelectorAll('img'), (el) => {
+        const src = el.getAttribute('src')
 
-        if ($this.data('exclude') === 'true') {
+        if (el.dataset.exclude === 'true') {
           return
         }
 
@@ -423,7 +434,7 @@ export default class Resources extends Tool {
     }
   }
   _enableObserver() {
-    this._observer.observe(document.documentElement, {
+    this._observer.observe(this._doc.documentElement, {
       attributes: true,
       childList: true,
       subtree: true,

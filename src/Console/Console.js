@@ -87,6 +87,18 @@ export default class Console extends Tool {
 
     return this
   }
+  // Execution entry point for the js input; embedders may replace this to
+  // run code in another realm (e.g. over CDP) and echo results back via
+  // displayInput/displayOutput.
+  executeJs(jsInput) {
+    this._logger.evaluate(jsInput)
+  }
+  displayInput(jsInput) {
+    this._logger.insert({ type: 'input', args: [jsInput], ignoreFilter: true })
+  }
+  displayOutput(val) {
+    this._logger.insert({ type: 'output', args: [val], ignoreFilter: true })
+  }
   filter(filter) {
     const $filterText = this._$filterText
     const logger = this._logger
@@ -263,7 +275,7 @@ export default class Console extends Tool {
         const jsInput = $input.val().trim()
         if (jsInput === '') return
 
-        logger.evaluate(jsInput)
+        this.executeJs(jsInput)
         $input.val('').get(0).blur()
         this._hideInput()
       })

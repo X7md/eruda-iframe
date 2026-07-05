@@ -61,14 +61,6 @@
         border: none;
         display: block;
       }
-      #devtools-pane {
-        flex: none;
-        height: 25vh;
-        position: relative;
-        border-top: 1px solid #444;
-        background: #1e1e1e;
-        overflow: hidden;
-      }
     </style>
   </head>
   <body>
@@ -80,26 +72,156 @@
       </button>
     </div>
     <div class="frame-wrap">
-      <iframe id="frame" src="app.html"></iframe>
+      <!-- src is assigned by the host script once the channel is wired, so
+           the agent's ready handshake can't race a not-yet-listening host. -->
+      <iframe id="frame"></iframe>
     </div>
-    <div id="devtools-pane"></div>
+    <!-- eruda runs entirely in this (host) page. The iframe runs chobitsu
+         (a CDP backend); everything crossing the boundary is Chrome DevTools
+         Protocol JSON over a BroadcastChannel: consoleAPICalled /
+         exceptionThrown events flow up, Runtime.evaluate / Page.reload
+         commands flow down. cdp-client.js converts CDP RemoteObjects back
+         into displayable values via Runtime.getProperties. -->
+    <script src="../assets/eruda.js"></script>
     <script>
-      const frame = document.getElementById('frame')
+      // /assets/ only exists on the rspack dev server and the deployed
+      // Pages site. On a plain static server started from the repo root
+      // (e.g. `python -m http.server`), load the built bundle from dist.
+      if (typeof eruda === 'undefined') {
+        document.write('<script src="../dist/eruda.js"><\/script>')
+      }
+    </script>
+    <script src="cdp-client.js"></script>
+    <script>
+      const cdp = window.PlaygroundCDP
+      const channel = new BroadcastChannel('eruda-playground')
+
+      // Classic floating eruda: the draggable entry button toggles the
+      // panel, which slides over the page. All tools are retargeted at the
+      // iframe realm on every load (see the frame load handler below):
+      // Network taps the iframe's chobitsu, Elements/Resources/Sources walk
+      // its document, Info shows its URL.
+      eruda.init({
+        tool: ['console', 'elements', 'network', 'sources', 'resources', 'info'],
+        defaults: {
+          displaySize: 45,
+        },
+      })
+
+      const devTools = eruda.get()
+      const consoleTool = eruda.get('console')
+      // The host page is not the debug target: leave its console and global
+      // errors alone. Only CDP traffic from the iframe gets displayed.
+      consoleTool.config.set('overrideConsole', false)
+      consoleTool.config.set('catchGlobalErr', false)
+
+      // Materialization is async (it may fetch object graphs over the
+      // wire); chain displays so logs keep their arrival order.
+      let displayQueue = Promise.resolve()
+      const enqueue = (work) => {
+        displayQueue = displayQueue.then(work).catch(() => {})
+      }
+
+      cdp.connect((payload) => channel.postMessage({ type: 'cdp', payload }))
+
+      // CDP consoleAPICalled types -> eruda console methods.
+      const CDP_TYPE_METHOD = {
+        warning: 'warn',
+        startGroup: 'group',
+        startGroupCollapsed: 'groupCollapsed',
+        endGroup: 'groupEnd',
+      }
+      cdp.on('Runtime.consoleAPICalled', ({ type, args }) => {
+        const method = CDP_TYPE_METHOD[type] || type
+        enqueue(async () => {
+          const values = await cdp.materializeAll(args)
+          if (typeof consoleTool[method] === 'function') {
+            consoleTool[method](...values)
+          } else {
+            consoleTool.log(...values)
+          }
+        })
+      })
+      cdp.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {
+        enqueue(async () => {
+          const err = await cdp.materialize(exceptionDetails.exception)
+          consoleTool.error(err)
+        })
+      })
+
+      // Code typed into eruda's js input runs in the iframe over CDP.
+      consoleTool.executeJs = (code) => {
+        consoleTool.displayInput(code)
+        enqueue(async () => {
+          const res = await cdp.send('Runtime.evaluate', { expression: code })
+          if (res.error) {
+            consoleTool.error(res.error.message)
+          } else if (res.exceptionDetails) {
+            consoleTool.error(await cdp.materialize(res.exceptionDetails.exception))
+          } else {
+            consoleTool.displayOutput(await cdp.materialize(res.result))
+          }
+        })
+      }
+
+      channel.onmessage = ({ data: msg }) => {
+        if (msg.type === 'cdp') {
+          cdp.receive(msg.payload)
+        } else if (msg.type === 'ready') {
+          // Fresh chobitsu instance (first load or iframe reload): drop
+          // in-flight commands and enable Runtime — chobitsu then flushes
+          // every console event buffered since document-start.
+          cdp.reset()
+          cdp.send('Runtime.enable')
+          document.getElementById('url').textContent = msg.url
+        }
+      }
+
+      // Control the iframe over CDP too — the host never reaches into the
+      // frame's realm.
       document.getElementById('reload').addEventListener('click', () => {
-        frame.contentWindow.location.reload()
+        cdp.send('Page.reload')
       })
-      frame.addEventListener('load', () => {
-        document.getElementById('url').textContent =
-          frame.contentWindow.location.pathname
-      })
+      // Same as tapping the floating entry button.
       document
         .getElementById('toggle-devtools')
-        .addEventListener('click', () => {
-          const eruda = frame.contentWindow.eruda
-          // eruda's native toggle; the iframe bootstrap syncs the pane
-          // height to the resulting show/hide events.
-          if (eruda && eruda.get()) eruda.get().toggle()
+        .addEventListener('click', () => devTools.toggle())
+
+      // Elements panel: the DOM tree walks the iframe's document directly
+      // (same origin), while the iframe's own chobitsu instance drives
+      // overlay highlighting, tap-to-inspect and the $0-$4 bindings — so
+      // they all live inside the iframe realm, where eval runs.
+      const frame = document.getElementById('frame')
+      // Console rendering of DOM nodes: materialize() stashes the node on
+      // the iframe window; hand the live reference to luna-console so
+      // elements render as DOM entries, not text.
+      cdp.setNodeResolver(() => {
+        const win = frame.contentWindow
+        if (!win) return null
+        const node = win.__PG_INSPECTED_NODE__
+        delete win.__PG_INSPECTED_NODE__
+        return node || null
+      })
+      frame.addEventListener('load', () => {
+        const win = frame.contentWindow
+        if (!win.chobitsu) return
+        eruda.get('elements').setTarget({
+          htmlEl: win.document.documentElement,
+          chobitsu: win.chobitsu,
         })
+        // Network instruments fetch/XHR through the iframe's chobitsu.
+        eruda.get('network').setTarget({ chobitsu: win.chobitsu })
+        // Sources' default view fetches the iframe page's own source.
+        eruda.get('sources').setTarget({ win })
+        // Script/stylesheet/iframe/image lists come from the iframe doc
+        // (storage & cookies are per-origin, shared with the host anyway).
+        eruda.get('resources').setTarget({ win })
+        // Info: show the inspected page's URL, not the host's.
+        eruda.get('info').add('Location', win.location.href)
+      })
+
+      // Everything is listening — boot the app.
+      frame.src = 'app.html'
     </script>
   </body>
 </html>

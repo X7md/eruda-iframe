@@ -30,6 +30,17 @@ export default class Network extends Tool {
     this._requests = {}
     this._selectedRequest = null
     this._isRecording = true
+    // Which chobitsu instance instruments fetch/XHR — swapped by setTarget
+    // when another realm (e.g. an iframe) is the debug target.
+    this._chobitsu = chobitsu
+  }
+  // Capture requests from another realm's chobitsu instead of this page's.
+  setTarget({ chobitsu: targetChobitsu }) {
+    this._unbindNetworkEvents()
+    if (targetChobitsu) this._chobitsu = targetChobitsu
+    this._bindNetworkEvents()
+
+    return this
   }
   init($el, container) {
     super.init($el)
@@ -193,7 +204,7 @@ export default class Network extends Tool {
 
     request.size = params.encodedDataLength
     request.done = true
-    request.resTxt = chobitsu.domain('Network').getResponseBody({
+    request.resTxt = this._chobitsu.domain('Network').getResponseBody({
       requestId: params.requestId,
     }).body
 
@@ -327,16 +338,26 @@ export default class Network extends Tool {
       }
     })
 
-    chobitsu.domain('Network').enable()
+    this._bindNetworkEvents()
 
-    const network = chobitsu.domain('Network')
+    emitter.on(emitter.SCALE, this._updateScale)
+  }
+  _bindNetworkEvents() {
+    const network = this._chobitsu.domain('Network')
+    network.enable()
     network.on('requestWillBeSent', this._reqWillBeSent)
     network.on('responseReceivedExtraInfo', this._resReceivedExtraInfo)
     network.on('responseReceived', this._resReceived)
     network.on('loadingFinished', this._loadingFinished)
     network.on('loadingFailed', this._loadingFailed)
-
-    emitter.on(emitter.SCALE, this._updateScale)
+  }
+  _unbindNetworkEvents() {
+    const network = this._chobitsu.domain('Network')
+    network.off('requestWillBeSent', this._reqWillBeSent)
+    network.off('responseReceivedExtraInfo', this._resReceivedExtraInfo)
+    network.off('responseReceived', this._resReceived)
+    network.off('loadingFinished', this._loadingFinished)
+    network.off('loadingFailed', this._loadingFailed)
   }
   _updateScale = (scale) => {
     this._splitMediaQuery.setQuery(`screen and (min-width: ${680 * scale}px)`)
@@ -348,11 +369,7 @@ export default class Network extends Tool {
     evalCss.remove(this._style)
     this._splitMediaQuery.removeAllListeners()
 
-    const network = chobitsu.domain('Network')
-    network.off('requestWillBeSent', this._reqWillBeSent)
-    network.off('responseReceivedExtraInfo', this._resReceivedExtraInfo)
-    network.off('responseReceived', this._resReceived)
-    network.off('loadingFinished', this._loadingFinished)
+    this._unbindNetworkEvents()
 
     emitter.off(emitter.SCALE, this._updateScale)
   }

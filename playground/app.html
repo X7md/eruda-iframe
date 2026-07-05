@@ -4,57 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Playground App</title>
-    <!-- Load eruda first so console/network instrumentation is active from document-start. -->
-    <!-- Relative path: works on the dev server and on GitHub Pages. -->
-    <script src="../assets/eruda.js"></script>
+    <!-- No devtools UI in here — chobitsu is the in-page Chrome DevTools
+         Protocol backend (it patches console at document-start and buffers
+         events until the host enables the Runtime domain). agent.js just
+         pipes CDP messages over a BroadcastChannel to/from the host page,
+         where eruda renders everything. -->
+    <script src="chobitsu.js"></script>
+    <script src="agent.js"></script>
     <script>
-      // Runs inside the iframe realm: eruda captures this page's console,
-      // errors, DOM and network natively, while its UI mounts into the
-      // host page's #devtools panel.
-      ;(function () {
-        if (window.parent === window) {
-          // Opened standalone (not inside the playground host): fall back
-          // to the regular floating eruda.
-          eruda.init()
-          return
-        }
-        const hostDoc = window.parent.document
-        const pane = hostDoc.getElementById('devtools-pane')
-        // Drop UI and head styles left behind by the previous realm (iframe
-        // reload). eruda renames its container and attaches a shadow root,
-        // so a fresh container element is needed on every load.
-        pane.innerHTML = ''
-        hostDoc
-          .querySelectorAll('style[data-eruda-style]')
-          .forEach((el) => el.remove())
-        const container = hostDoc.createElement('div')
-        pane.appendChild(container)
-        eruda.init({
-          container,
-          inline: true,
-          autoScale: false,
-          defaults: {
-            displaySize: 25,
-          },
-        })
-        // eruda applies `all: initial` to the container; restore sizing so it
-        // fills the pane (inline mode makes the panel 100% of the container).
-        container.style.display = 'block'
-        container.style.height = '100%'
-        container.style.position = 'relative'
-        // Inline mode ignores the exposed "Display Size" setting, so drive
-        // the host pane height from it instead (Settings tab slider works).
-        // Only react to changes: the stored value may predate the playground,
-        // so the 25vh default from the host CSS wins until the user moves it.
-        const devTools = eruda.get()
-        devTools.config.on('change', (key, val) => {
-          if (key === 'displaySize') pane.style.height = val + 'vh'
-        })
-        // Collapse/expand the host pane with eruda's native show/hide.
-        devTools.on('hide', () => (pane.style.display = 'none'))
-        devTools.on('show', () => (pane.style.display = ''))
-      })()
-      console.log('Hello from the iframe! eruda is wired up.')
+      console.log('Hello from the iframe! chobitsu agent is wired up.')
     </script>
     <style>
       body {
@@ -140,7 +98,7 @@
 
     <div class="card">
       <h2>Network</h2>
-      <button onclick="fetch('../data.json').then(r => r.json()).then(d => console.log('fetched:', d))">
+      <button onclick="fetch('data.json').then(r => r.json()).then(d => console.log('fetched:', d))">
         fetch data.json
       </button>
       <button onclick="fetch('../no-such-thing').then(r => console.log('status', r.status))">
@@ -178,7 +136,7 @@
 
       document.getElementById('xhr-btn').addEventListener('click', () => {
         const xhr = new XMLHttpRequest()
-        xhr.open('GET', '../data.json')
+        xhr.open('GET', 'data.json')
         xhr.onload = () => console.log('xhr done:', xhr.status)
         xhr.send()
       })

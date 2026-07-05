@@ -29,6 +29,6 @@ export default [
   },
   {files: ['build/**/*.js'], languageOptions:{globals: {...globals.node}}},
   {
-    ignores: ['test','dist','coverage'],
+    ignores: ['test','dist','coverage','playground/chobitsu.js'],
   }
 ]

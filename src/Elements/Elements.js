@@ -28,6 +28,9 @@ export default class Elements extends Tool {
     this._selectElement = false
     this._observeElement = true
     this._history = []
+    // Which chobitsu instance drives overlay/inspect/$0 — swapped by
+    // setTarget when the panel inspects another realm's document.
+    this._chobitsu = chobitsu
 
     Emitter.mixin(this)
   }
@@ -42,22 +45,59 @@ export default class Elements extends Tool {
     this.config = this._detail.config
     this._splitMediaQuery = new MediaQuery('screen and (min-width: 680px)')
     this._splitMode = this._splitMediaQuery.isMatch()
-    this._domViewer = new LunaDomViewer(this._$domViewer.get(0), {
+    this._domViewer = this._createDomViewer()
+    this._bindEvent()
+    this._chobitsu.domain('Overlay').enable()
+
+    nextTick(() => this._updateHistory())
+  }
+  // Point the panel at another same-origin document (e.g. an iframe):
+  // DOM tree, selection, crumbs and history all follow. The target realm's
+  // chobitsu takes over overlay highlighting, inspect mode and $0-$4, so
+  // they land inside that realm, not this page.
+  setTarget({ htmlEl, chobitsu: targetChobitsu }) {
+    const prev = this._chobitsu
+    prev.domain('Overlay').off('inspectNodeRequested', this._inspectNodeRequested)
+    prev.domain('Overlay').hideHighlight()
+    if (targetChobitsu) this._chobitsu = targetChobitsu
+    this._detail.setChobitsu(this._chobitsu)
+
+    this._htmlEl = htmlEl
+    this._curNode = null
+    this._history = []
+
+    this._domViewer.destroy()
+    this._$domViewer.html('')
+    this._$crumbs.html('')
+    this._domViewer = this._createDomViewer()
+    this._domViewer.on('select', this._setNode).on('deselect', this._back)
+
+    this._chobitsu.domain('Overlay').enable()
+    this._chobitsu
+      .domain('Overlay')
+      .on('inspectNodeRequested', this._inspectNodeRequested)
+
+    if (this._isShow) {
+      this.select(htmlEl.ownerDocument.body || htmlEl)
+    }
+
+    return this
+  }
+  _createDomViewer() {
+    const domViewer = new LunaDomViewer(this._$domViewer.get(0), {
       node: this._htmlEl,
       ignore: (node) => isErudaEl(node) || isChobitsuEl(node),
     })
-    this._domViewer.expand()
-    this._bindEvent()
-    chobitsu.domain('Overlay').enable()
-
-    nextTick(() => this._updateHistory())
+    domViewer.expand()
+    return domViewer
   }
   show() {
     super.show()
     this._isShow = true
 
     if (!this._curNode) {
-      this.select(document.body)
+      const doc = this._htmlEl.ownerDocument
+      this.select(doc.body || this._htmlEl)
     } else if (this._splitMode) {
       this._showDetail()
     }
@@ -66,7 +106,7 @@ export default class Elements extends Tool {
     super.hide()
     this._isShow = false
 
-    chobitsu.domain('Overlay').hideHighlight()
+    this._chobitsu.domain('Overlay').hideHighlight()
   }
   select(node) {
     this._domViewer.select(node)
@@ -80,10 +120,10 @@ export default class Elements extends Tool {
     emitter.off(emitter.SCALE, this._updateScale)
     evalCss.remove(this._style)
     this._detail.destroy()
-    chobitsu
+    this._chobitsu
       .domain('Overlay')
       .off('inspectNodeRequested', this._inspectNodeRequested)
-    chobitsu.domain('Overlay').disable()
+    this._chobitsu.domain('Overlay').disable()
     this._splitMediaQuery.removeAllListeners()
   }
   _updateButtons() {
@@ -103,7 +143,8 @@ export default class Elements extends Tool {
       return
     }
 
-    if (node !== document.documentElement && node !== document.body) {
+    const doc = this._htmlEl.ownerDocument
+    if (node !== doc.documentElement && node !== doc.body) {
       $deleteNode.rmClass(iconDisabled)
     }
     $copyNode.rmClass(iconDisabled)
@@ -192,7 +233,7 @@ export default class Elements extends Tool {
 
     this._domViewer.on('select', this._setNode).on('deselect', this._back)
 
-    chobitsu
+    this._chobitsu
       .domain('Overlay')
       .on('inspectNodeRequested', this._inspectNodeRequested)
 
@@ -233,7 +274,7 @@ export default class Elements extends Tool {
     this._selectElement = !this._selectElement
 
     if (this._selectElement) {
-      chobitsu.domain('Overlay').setInspectMode({
+      this._chobitsu.domain('Overlay').setInspectMode({
         mode: 'searchForNode',
         highlightConfig: {
           showInfo: !isMobile(),
@@ -249,17 +290,21 @@ export default class Elements extends Tool {
       })
       this._container.hide()
     } else {
-      chobitsu.domain('Overlay').setInspectMode({
+      this._chobitsu.domain('Overlay').setInspectMode({
         mode: 'none',
       })
-      chobitsu.domain('Overlay').hideHighlight()
+      this._chobitsu.domain('Overlay').hideHighlight()
     }
   }
   _inspectNodeRequested = ({ backendNodeId }) => {
     this._container.show()
     this._toggleSelect()
     try {
-      const { node } = chobitsu.domain('DOM').getNode({ nodeId: backendNodeId })
+      // getDOMNode: present on both eruda's wrapped chobitsu and the stock
+      // bundle (the getNode alias only exists on the wrapped one).
+      const { node } = this._chobitsu
+        .domain('DOM')
+        .getDOMNode({ nodeId: backendNodeId })
       this.select(node)
     } catch {
       // No op
@@ -287,11 +332,22 @@ export default class Elements extends Tool {
     this._updateHistory()
   }
   _updateHistory() {
-    const console = this._container.get('console')
-    if (!console) return
     // Nothing selected yet (init time): keep the console's seeded values
     // instead of clobbering $0-$4 with undefined.
     if (!this._curNode) return
+
+    // CDP-style binding: $0-$4 become available to Runtime.evaluate inside
+    // the inspected realm (matters when that realm is another document).
+    try {
+      const dom = this._chobitsu.domain('DOM')
+      const { nodeId } = dom.getDOMNodeId({ node: this._curNode })
+      dom.setInspectedNode({ nodeId })
+    } catch {
+      // DOM domain unavailable
+    }
+
+    const console = this._container.get('console')
+    if (!console) return
 
     const history = this._history
     history.unshift(this._curNode)
