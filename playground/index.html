@@ -82,17 +82,22 @@
          exceptionThrown events flow up, Runtime.evaluate / Page.reload
          commands flow down. cdp-client.js converts CDP RemoteObjects back
          into displayable values via Runtime.getProperties. -->
-    <script src="../assets/eruda.js"></script>
-    <script>
+    <!-- data-cfasync="false": opt out of Cloudflare Rocket Loader, which
+         otherwise defers these scripts and breaks load ordering when the
+         site is served through a Cloudflare-proxied domain. -->
+    <script data-cfasync="false" src="../assets/eruda.js"></script>
+    <script data-cfasync="false">
       // /assets/ only exists on the rspack dev server and the deployed
       // Pages site. On a plain static server started from the repo root
       // (e.g. `python -m http.server`), load the built bundle from dist.
       if (typeof eruda === 'undefined') {
-        document.write('<script src="../dist/eruda.js"><\/script>')
+        document.write(
+          '<script data-cfasync="false" src="../dist/eruda.js"><\/script>'
+        )
       }
     </script>
-    <script src="cdp-client.js"></script>
-    <script>
+    <script data-cfasync="false" src="cdp-client.js"></script>
+    <script data-cfasync="false">
       const cdp = window.PlaygroundCDP
       const channel = new BroadcastChannel('eruda-playground')
 
@@ -174,6 +179,9 @@
           cdp.reset()
           cdp.send('Runtime.enable')
           document.getElementById('url').textContent = msg.url
+          // The agent only announces after chobitsu is up, so this covers
+          // environments where the iframe's load event beat its scripts.
+          retargetTools()
         }
       }
 
@@ -202,9 +210,12 @@
         delete win.__PG_INSPECTED_NODE__
         return node || null
       })
-      frame.addEventListener('load', () => {
+      const retargetTools = () => {
         const win = frame.contentWindow
-        if (!win.chobitsu) return
+        // chobitsu may not have executed yet if the iframe's scripts were
+        // deferred (e.g. by a CDN optimizer); the agent's "ready" message
+        // triggers a second retarget once it definitely exists.
+        if (!win || !win.chobitsu) return
         eruda.get('elements').setTarget({
           htmlEl: win.document.documentElement,
           chobitsu: win.chobitsu,
@@ -218,7 +229,8 @@
         eruda.get('resources').setTarget({ win })
         // Info: show the inspected page's URL, not the host's.
         eruda.get('info').add('Location', win.location.href)
-      })
+      }
+      frame.addEventListener('load', retargetTools)
 
       // Everything is listening — boot the app.
       frame.src = 'app.html'

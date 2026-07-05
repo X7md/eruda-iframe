@@ -9,9 +9,11 @@
          events until the host enables the Runtime domain). agent.js just
          pipes CDP messages over a BroadcastChannel to/from the host page,
          where eruda renders everything. -->
-    <script src="chobitsu.js"></script>
-    <script src="agent.js"></script>
-    <script>
+    <!-- data-cfasync="false": keep Cloudflare Rocket Loader from deferring
+         these — the agent must run at document-start. -->
+    <script data-cfasync="false" src="chobitsu.js"></script>
+    <script data-cfasync="false" src="agent.js"></script>
+    <script data-cfasync="false">
       console.log('Hello from the iframe! chobitsu agent is wired up.')
     </script>
     <style>
@@ -119,7 +121,7 @@
       <button id="spin-box">animate box</button>
     </div>
 
-    <script>
+    <script data-cfasync="false">
       let intervalId = null
       let tick = 0
       document.getElementById('interval-btn').addEventListener('click', function () {
