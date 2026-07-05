@@ -54,7 +54,11 @@ export default class Detail {
   hide = () => {
     this._$container.hide()
     this._disableObserver()
-    this._chobitsu.domain('Overlay').hideHighlight()
+    try {
+      this._chobitsu.domain('Overlay').hideHighlight()
+    } catch {
+      // overlay not enabled yet, or its realm is gone (iframe reload)
+    }
   }
   destroy() {
     this._disableObserver()

@@ -58,7 +58,7 @@ export default class Elements extends Tool {
   setTarget({ htmlEl, chobitsu: targetChobitsu }) {
     const prev = this._chobitsu
     prev.domain('Overlay').off('inspectNodeRequested', this._inspectNodeRequested)
-    prev.domain('Overlay').hideHighlight()
+    this._hideOverlay(prev)
     if (targetChobitsu) this._chobitsu = targetChobitsu
     this._detail.setChobitsu(this._chobitsu)
 
@@ -66,6 +66,10 @@ export default class Elements extends Tool {
     this._curNode = null
     this._history = []
 
+    // Detach handlers first: destroy() can emit deselect into _back with a
+    // parent queue full of nodes from the discarded document.
+    this._domViewer.off('select', this._setNode)
+    this._domViewer.off('deselect', this._back)
     this._domViewer.destroy()
     this._$domViewer.html('')
     this._$crumbs.html('')
@@ -82,6 +86,16 @@ export default class Elements extends Tool {
     }
 
     return this
+  }
+  // Overlay.hideHighlight throws if the domain was never enabled or its
+  // realm was discarded (iframe reload). A throw here would propagate into
+  // DevTools.showTool and wedge tab switching, so swallow it.
+  _hideOverlay(chobitsu) {
+    try {
+      chobitsu.domain('Overlay').hideHighlight()
+    } catch {
+      // noop
+    }
   }
   _createDomViewer() {
     const domViewer = new LunaDomViewer(this._$domViewer.get(0), {
@@ -106,7 +120,7 @@ export default class Elements extends Tool {
     super.hide()
     this._isShow = false
 
-    this._chobitsu.domain('Overlay').hideHighlight()
+    this._hideOverlay(this._chobitsu)
   }
   select(node) {
     this._domViewer.select(node)
@@ -123,7 +137,11 @@ export default class Elements extends Tool {
     this._chobitsu
       .domain('Overlay')
       .off('inspectNodeRequested', this._inspectNodeRequested)
-    this._chobitsu.domain('Overlay').disable()
+    try {
+      this._chobitsu.domain('Overlay').disable()
+    } catch {
+      // target realm may already be gone
+    }
     this._splitMediaQuery.removeAllListeners()
   }
   _updateButtons() {
@@ -200,14 +218,17 @@ export default class Elements extends Tool {
   _back = () => {
     if (this._curNode === this._htmlEl) return
 
-    const parentQueue = this._curParentQueue
+    const parentQueue = this._curParentQueue || []
     let parent = parentQueue.shift()
 
-    while (!isElExist(parent)) {
+    // Stop when the queue runs dry (e.g. every ancestor belongs to a
+    // discarded document after an iframe reload) — the old unguarded loop
+    // spun forever on undefined and froze the page.
+    while (parent && !isElExist(parent)) {
       parent = parentQueue.shift()
     }
 
-    this.set(parent)
+    if (parent) this.select(parent)
   }
   _bindEvent() {
     const self = this
